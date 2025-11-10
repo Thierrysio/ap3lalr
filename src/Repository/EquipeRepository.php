@@ -15,6 +15,7 @@ class EquipeRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Equipe::class);
     }
+<<<<<<< HEAD
 
     //    /**
     //     * @return Equipe[] Returns an array of Equipe objects
@@ -40,4 +41,6 @@ class EquipeRepository extends ServiceEntityRepository
     //            ->getOneOrNullResult()
     //        ;
     //    }
+=======
+>>>>>>> 3c470a71bd21a4f090cd8861b93e2011126f1b91
 }

@@ -3,23 +3,15 @@
 namespace App\Entity;
 
 use App\Repository\EquipeRepository;
-<<<<<<< HEAD
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: EquipeRepository::class)]
-=======
-use Doctrine\ORM\Mapping as ORM;
-
-#[ORM\Entity(repositoryClass: EquipeRepository::class)]
-#[ORM\Table(name: 'equipes')]
->>>>>>> 3c470a71bd21a4f090cd8861b93e2011126f1b91
 class Equipe
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
-<<<<<<< HEAD
     #[ORM\Column]
     private ?int $id = null;
 
@@ -48,20 +40,12 @@ class Equipe
     {
         $this->lesUsers = new ArrayCollection();
     }
-=======
-    #[ORM\Column(type: 'integer')]
-    private ?int $id = null;
-
-    #[ORM\Column(length: 255)]
-    private ?string $nom = null;
->>>>>>> 3c470a71bd21a4f090cd8861b93e2011126f1b91
 
     public function getId(): ?int
     {
         return $this->id;
     }
 
-<<<<<<< HEAD
     public function getMaxJoueurs(): ?int
     {
         return $this->maxJoueurs;
@@ -142,16 +126,6 @@ class Equipe
     public function removeLesUser(User $lesUser): static
     {
         $this->lesUsers->removeElement($lesUser);
-=======
-    public function getNom(): ?string
-    {
-        return $this->nom;
-    }
-
-    public function setNom(string $nom): self
-    {
-        $this->nom = $nom;
->>>>>>> 3c470a71bd21a4f090cd8861b93e2011126f1b91
 
         return $this;
     }

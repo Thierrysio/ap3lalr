@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\Epreuve;
 use App\Entity\User;
 
 use App\Repository\UserRepository;
@@ -14,6 +15,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use DateTime;
+use InvalidArgumentException;
 
 
 
@@ -39,18 +42,18 @@ final class ApiController extends AbstractController
         UserRepository $userRepository,
         ValidatorInterface $validator
     ): JsonResponse {
-        // 1) vÈrifier content-type
+        // 1) v√©rifier content-type
         if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
             return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
         }
 
-        // 2) parser le JSON en sÈcuritÈ
+        // 2) parser le JSON en s√©curit√©
         $data = json_decode($request->getContent(), false);
         if (null === $data) {
             return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
         }
 
-        // 3) rÈcupÈrer et valider la prÈsence des champs
+        // 3) r√©cup√©rer et valider la pr√©sence des champs
         $email = $data->Email ?? null;
         $plainPassword = $data->Password ?? null;
         $nom = $data->Nom ?? null;
@@ -60,33 +63,33 @@ final class ApiController extends AbstractController
             return new JsonResponse(['error' => 'Champs manquants'], Response::HTTP_BAD_REQUEST);
         }
 
-        // 4) vÈrif format email basique et unicitÈ
+        // 4) v√©rif format email basique et unicit√©
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return new JsonResponse(['error' => 'Email invalide'], Response::HTTP_BAD_REQUEST);
         }
 
         if ($userRepository->findOneBy(['email' => mb_strtolower($email)])) {
-            return new JsonResponse(['error' => 'Email dÈj‡ utilisÈ'], Response::HTTP_CONFLICT);
+            return new JsonResponse(['error' => 'Email d√©j√† utilis√©'], Response::HTTP_CONFLICT);
         }
 
-        // 5) rËgles mot de passe minimales (adapter ‡ ta politique)
+        // 5) r√®gles mot de passe minimales (adapter √† ta politique)
         if (mb_strlen($plainPassword) < 8) {
-            return new JsonResponse(['error' => 'Mot de passe trop court (= 8 caractËres)'], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['error' => 'Mot de passe trop court (= 8 caract√®res)'], Response::HTTP_BAD_REQUEST);
         }
         // tu peux ajouter complexity (majuscule, chiffre, symbole) si besoin
 
-        // 6) crÈation utilisateur
+        // 6) cr√©ation utilisateur
         $user = new User();
         $user->setEmail(mb_strtolower($email));
         $user->setNom(trim($nom));
         $user->setPrenom(trim($prenom));
-        $user->setStatut(false); // dÈfaut: inactif en attendant vÈrif e-mail
+        $user->setStatut(false); // d√©faut: inactif en attendant v√©rif e-mail
         $user->setRoles(['ROLE_USER']);
 
         $hashed = $passwordHasher->hashPassword($user, $plainPassword);
         $user->setPassword($hashed);
 
-        // 7) validation de l'entitÈ (contraintes @Assert sur l'entitÈ)
+        // 7) validation de l'entit√© (contraintes @Assert sur l'entit√©)
         $errors = $validator->validate($user);
         if (count($errors) > 0) {
             $err = [];
@@ -105,7 +108,7 @@ final class ApiController extends AbstractController
             return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
-        // 9) ne pas renvoyer l'entitÈ complËte ó renvoyer un payload minimal
+        // 9) ne pas renvoyer l'entit√© compl√®te ¬ó renvoyer un payload minimal
         $payload = [
             'id' => $user->getId(),
             'email' => $user->getEmail(),
@@ -114,7 +117,7 @@ final class ApiController extends AbstractController
             'statut' => $user->getStatut(),
         ];
 
-        // 10) (optionnel) gÈnÈrer token de confirmation email et l'envoyer ici
+        // 10) (optionnel) g√©n√©rer token de confirmation email et l'envoyer ici
 
         return new JsonResponse($payload, Response::HTTP_CREATED);
     }
@@ -157,18 +160,117 @@ $tab = [];
 return $response->GetJsonResponse($request, $var,$tab);
 }
 /**
-* Retourne la liste de toutes les Èpreuves au format JSON.
+* Retourne la liste de toutes les √©preuves au format JSON.
 *
 * Exemple de route : GET /api/epreuves
 */
 #[Route('/api/mobile/getAllEpreuves', name: 'app_api_getAllEpreuves')]
 public function getAllEpreuves(Request $request, EpreuveRepository $epreuveRepository)
 {
-    $postdata = json_decode($request->getContent()); // si tu as besoin de paramËtres
+    $postdata = json_decode($request->getContent()); // si tu as besoin de param√®tres
     $var = $epreuveRepository->findAll();
 
     $response = new Utils;
     $tab = []; // meta / extras si besoin
     return $response->GetJsonResponse($request, $var, $tab);
 }
+
+#[Route('/api/mobile/createEpreuve', name: 'app_api_create_epreuve', methods: ['POST'])]
+public function createEpreuve(Request $request, EntityManagerInterface $entityManager): JsonResponse
+{
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $data = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $epreuve = new Epreuve();
+
+    try {
+        $this->hydrateEpreuve($epreuve, $data);
+    } catch (InvalidArgumentException $exception) {
+        return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+    }
+
+    try {
+        $entityManager->persist($epreuve);
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    $utils = new Utils();
+    $response = $utils->GetJsonResponse($request, $epreuve);
+    $response->setStatusCode(Response::HTTP_CREATED);
+
+    return $response;
+}
+
+#[Route('/api/mobile/updateEpreuve/{id}', name: 'app_api_update_epreuve', methods: ['PUT', 'PATCH'])]
+public function updateEpreuve(int $id, Request $request, EpreuveRepository $epreuveRepository, EntityManagerInterface $entityManager): JsonResponse
+{
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $epreuve = $epreuveRepository->find($id);
+    if (!$epreuve) {
+        return new JsonResponse(['error' => 'Epreuve non trouvee'], Response::HTTP_NOT_FOUND);
+    }
+
+    $data = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    try {
+        $this->hydrateEpreuve($epreuve, $data);
+    } catch (InvalidArgumentException $exception) {
+        return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+    }
+
+    try {
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    $utils = new Utils();
+    return $utils->GetJsonResponse($request, $epreuve);
+}
+
+private function hydrateEpreuve(Epreuve $epreuve, array $data): void
+{
+    $requiredFields = ['nomEpreuve', 'libelle', 'duree', 'difficulte', 'pointEpreuve', 'lieuEpreuve', 'typeEpreuve', 'nbIndiceAGagner', 'dateEpreuveDebut', 'dateEpreuveFin', 'coeffAnnee'];
+
+    foreach ($requiredFields as $field) {
+        if (!array_key_exists($field, $data)) {
+            throw new InvalidArgumentException(sprintf('Champ manquant : %s', $field));
+        }
+    }
+
+    try {
+        $duree = new DateTime($data['duree']);
+        $dateDebut = new DateTime($data['dateEpreuveDebut']);
+        $dateFin = new DateTime($data['dateEpreuveFin']);
+    } catch (\Exception $exception) {
+        throw new InvalidArgumentException('Format de date invalide');
+    }
+
+    $epreuve->setNomEpreuve($data['nomEpreuve']);
+    $epreuve->setLibelle($data['libelle']);
+    $epreuve->setDuree($duree);
+    $epreuve->setDifficulte((int) $data['difficulte']);
+    $epreuve->setPointEpreuve((float) $data['pointEpreuve']);
+    $epreuve->setLieuEpreuve($data['lieuEpreuve']);
+    $epreuve->setTypeEpreuve($data['typeEpreuve']);
+    $epreuve->setNbIndiceAGagner((int) $data['nbIndiceAGagner']);
+    $epreuve->setDateEpreuveDebut($dateDebut);
+    $epreuve->setDateEpreuveFin($dateFin);
+    $epreuve->setCoeffAnnee((float) $data['coeffAnnee']);
+}
+
 }

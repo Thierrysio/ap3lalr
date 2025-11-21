@@ -6,6 +6,7 @@ use App\Repository\EpreuveRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use App\Entity\User;
 
 #[ORM\Entity(repositoryClass: EpreuveRepository::class)]
 class Epreuve
@@ -22,7 +23,7 @@ class Epreuve
     private ?string $libelle = null;
 
     #[ORM\Column]
-    private ?\DateTime $duree = null;
+    private ?int $duree = null;
 
     #[ORM\Column]
     private ?int $difficulte = null;
@@ -57,9 +58,16 @@ class Epreuve
     #[ORM\ManyToMany(targetEntity: Surveillant::class, mappedBy: 'lesEpreuves')]
     private Collection $lesSurveillants;
 
+    /**
+     * @var Collection<int, User>
+     */
+    #[ORM\ManyToMany(targetEntity: User::class)]
+    private Collection $participants;
+
     public function __construct()
     {
         $this->lesSurveillants = new ArrayCollection();
+        $this->participants = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -91,12 +99,12 @@ class Epreuve
         return $this;
     }
 
-    public function getDuree(): ?\DateTime
+    public function getDuree(): ?int
     {
         return $this->duree;
     }
 
-    public function setDuree(\DateTime $duree): static
+    public function setDuree(int $duree): static
     {
         $this->duree = $duree;
 
@@ -234,6 +242,30 @@ class Epreuve
         if ($this->lesSurveillants->removeElement($lesSurveillant)) {
             $lesSurveillant->removeLesEpreufe($this);
         }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    public function getParticipants(): Collection
+    {
+        return $this->participants;
+    }
+
+    public function addParticipant(User $participant): static
+    {
+        if (!$this->participants->contains($participant)) {
+            $this->participants->add($participant);
+        }
+
+        return $this;
+    }
+
+    public function removeParticipant(User $participant): static
+    {
+        $this->participants->removeElement($participant);
 
         return $this;
     }

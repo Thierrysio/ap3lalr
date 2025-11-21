@@ -242,6 +242,86 @@ public function updateEpreuve(int $id, Request $request, EpreuveRepository $epre
     return $utils->GetJsonResponse($request, $epreuve);
 }
 
+#[Route('/api/mobile/epreuves/{id}/inscription', name: 'app_api_register_epreuve_user', methods: ['POST'])]
+public function registerUserToEpreuve(
+    int $id,
+    Request $request,
+    EpreuveRepository $epreuveRepository,
+    UserRepository $userRepository,
+    EntityManagerInterface $entityManager
+): JsonResponse {
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $payload = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    if (!isset($payload['userId']) || !is_numeric($payload['userId'])) {
+        return new JsonResponse(['error' => 'userId est requis et doit être numérique'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $epreuve = $epreuveRepository->find($id);
+    if (!$epreuve) {
+        return new JsonResponse(['error' => 'Épreuve non trouvée'], Response::HTTP_NOT_FOUND);
+    }
+
+    $user = $userRepository->find((int) $payload['userId']);
+    if (!$user) {
+        return new JsonResponse(['error' => 'Utilisateur non trouvé'], Response::HTTP_NOT_FOUND);
+    }
+
+    if ($epreuve->getParticipants()->contains($user)) {
+        return new JsonResponse(['message' => 'Utilisateur déjà inscrit à cette épreuve'], Response::HTTP_OK);
+    }
+
+    $epreuve->addParticipant($user);
+    $entityManager->flush();
+
+    return new JsonResponse([
+        'message' => 'Inscription enregistrée',
+        'epreuveId' => $epreuve->getId(),
+        'userId' => $user->getId(),
+    ], Response::HTTP_CREATED);
+}
+
+#[Route('/api/mobile/equipes/{id}/points', name: 'app_api_update_equipe_points', methods: ['POST', 'PUT', 'PATCH'])]
+public function updateEquipePoints(
+    int $id,
+    Request $request,
+    EquipeRepository $equipeRepository,
+    EntityManagerInterface $entityManager
+): JsonResponse {
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $payload = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    if (!isset($payload['points']) || !is_numeric($payload['points'])) {
+        return new JsonResponse(['error' => 'points est requis et doit être numérique'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $equipe = $equipeRepository->find($id);
+    if (!$equipe) {
+        return new JsonResponse(['error' => 'Équipe non trouvée'], Response::HTTP_NOT_FOUND);
+    }
+
+    $equipe->setPoint((float) $payload['points']);
+    $entityManager->flush();
+
+    return new JsonResponse([
+        'message' => 'Points mis à jour',
+        'equipeId' => $equipe->getId(),
+        'points' => $equipe->getPoint(),
+    ], Response::HTTP_OK);
+}
+
 private function hydrateEpreuve(Epreuve $epreuve, array $data): void
 {
     $requiredFields = ['nomEpreuve', 'libelle', 'duree', 'difficulte', 'pointEpreuve', 'lieuEpreuve', 'typeEpreuve', 'nbIndiceAGagner', 'dateEpreuveDebut', 'dateEpreuveFin', 'coeffAnnee'];
@@ -252,8 +332,11 @@ private function hydrateEpreuve(Epreuve $epreuve, array $data): void
         }
     }
 
+    if (!is_numeric($data['duree'])) {
+        throw new InvalidArgumentException('La durée doit être un entier (minutes)');
+    }
+
     try {
-        $duree = new DateTime($data['duree']);
         $dateDebut = new DateTime($data['dateEpreuveDebut']);
         $dateFin = new DateTime($data['dateEpreuveFin']);
     } catch (\Exception $exception) {
@@ -262,7 +345,7 @@ private function hydrateEpreuve(Epreuve $epreuve, array $data): void
 
     $epreuve->setNomEpreuve($data['nomEpreuve']);
     $epreuve->setLibelle($data['libelle']);
-    $epreuve->setDuree($duree);
+    $epreuve->setDuree((int) $data['duree']);
     $epreuve->setDifficulte((int) $data['difficulte']);
     $epreuve->setPointEpreuve((float) $data['pointEpreuve']);
     $epreuve->setLieuEpreuve($data['lieuEpreuve']);

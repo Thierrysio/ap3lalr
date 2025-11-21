@@ -209,7 +209,7 @@ public function createEpreuve(Request $request, EntityManagerInterface $entityMa
     return $response;
 }
 
-#[Route('/api/mobile/updateEpreuve/{id}', name: 'app_api_update_epreuve', methods: ['PUT', 'PATCH'])]
+#[Route('/api/mobile/updateEpreuve/{id}', name: 'app_api_update_epreuve', methods: ['PUT', 'PATCH', 'POST'])]
 public function updateEpreuve(int $id, Request $request, EpreuveRepository $epreuveRepository, EntityManagerInterface $entityManager): JsonResponse
 {
     if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {

@@ -14,28 +14,24 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 
 class Utils
 {
-    public function GetJsonResponse(Request $request, $var, $ignoredFields = [])
+    public function GetJsonResponse(Request $request, $var, $ignoredFields = []): JsonResponse
     {
         $encoder = new JsonEncoder();
         $defaultContext = [
-                    AbstractNormalizer::CIRCULAR_REFERENCE_HANDLER => function ($object, $format, $context) {
-                        return $object->getId();
-                    },
-                ];
+            AbstractNormalizer::CIRCULAR_REFERENCE_HANDLER => function ($object, $format, $context) {
+                return $object->getId();
+            },
+        ];
 
-                $normalizer = new ObjectNormalizer(null, null, null, null, null, null, $defaultContext);
-                $dateNormalizer = new DateTimeNormalizer(array('datetime_format' => 'Y-m-d H:i:s'));
+        $normalizer = new ObjectNormalizer(null, null, null, null, null, null, $defaultContext);
+        $dateNormalizer = new DateTimeNormalizer(['datetime_format' => 'Y-m-d H:i:s']);
 
         $serializer = new Serializer([$dateNormalizer, $normalizer], [$encoder]);
-        $data = $request->getContent();
-        
+
         array_push($ignoredFields, '__initializer__', '__cloner__', '__isInitialized__'); // Permet d'enlever des champs inutiles
         $data = $serializer->serialize($var, 'json', [AbstractNormalizer::IGNORED_ATTRIBUTES => $ignoredFields]);
-        $response = new Response($data);
-        $response->headers->set('Content-Type', 'application/json');
 
-
-        return $response;
+        return JsonResponse::fromJsonString($data);
     }
 
     public static function ErrorMissingArguments()

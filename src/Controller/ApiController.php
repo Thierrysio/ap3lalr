@@ -2,12 +2,13 @@
 
 namespace App\Controller;
 
+use App\Entity\Equipe;
 use App\Entity\Epreuve;
 use App\Entity\User;
 
-use App\Repository\UserRepository;
-use App\Repository\EquipeRepository;
-use App\Repository\EpreuveRepository;
+    use App\Repository\UserRepository;
+    use App\Repository\EquipeRepository;
+    use App\Repository\EpreuveRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -151,13 +152,98 @@ return $response->GetJsonResponse($request, $var,$tab);
 }
 
 #[Route('/api/mobile/getAllEquipes', name: 'app_api_getAllEquipes')]
-public function getAllEquipess(Request $request,EquipeRepository $equipeRepository)
+    public function getAllEquipess(Request $request,EquipeRepository $equipeRepository)
+    {
+        $postdata = json_decode($request->getContent());
+    $var =  $equipeRepository->findAll();
+    $response = new Utils;
+    $tab = [];
+    return $response->GetJsonResponse($request, $var,$tab);
+    }
+
+#[Route('/api/mobile/createEquipe', name: 'app_api_create_equipe', methods: ['POST'])]
+public function createEquipe(Request $request, EntityManagerInterface $entityManager): JsonResponse
 {
-    $postdata = json_decode($request->getContent());
-$var =  $equipeRepository->findAll();
-$response = new Utils;
-$tab = [];
-return $response->GetJsonResponse($request, $var,$tab);
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $data = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $equipe = new Equipe();
+
+    try {
+        $this->hydrateEquipe($equipe, $data);
+    } catch (InvalidArgumentException $exception) {
+        return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+    }
+
+    try {
+        $entityManager->persist($equipe);
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    $utils = new Utils();
+    $response = $utils->GetJsonResponse($request, $equipe);
+    $response->setStatusCode(Response::HTTP_CREATED);
+
+    return $response;
+}
+
+#[Route('/api/mobile/updateEquipe/{id}', name: 'app_api_update_equipe', methods: ['POST', 'PUT', 'PATCH'])]
+public function updateEquipe(int $id, Request $request, EquipeRepository $equipeRepository, EntityManagerInterface $entityManager): JsonResponse
+{
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $equipe = $equipeRepository->find($id);
+    if (!$equipe) {
+        return new JsonResponse(['error' => 'Équipe non trouvée'], Response::HTTP_NOT_FOUND);
+    }
+
+    $data = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    try {
+        $this->hydrateEquipe($equipe, $data);
+    } catch (InvalidArgumentException $exception) {
+        return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+    }
+
+    try {
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    $utils = new Utils();
+    return $utils->GetJsonResponse($request, $equipe);
+}
+
+#[Route('/api/mobile/deleteEquipe/{id}', name: 'app_api_delete_equipe', methods: ['POST', 'DELETE'])]
+public function deleteEquipe(int $id, EquipeRepository $equipeRepository, EntityManagerInterface $entityManager): JsonResponse
+{
+    $equipe = $equipeRepository->find($id);
+    if (!$equipe) {
+        return new JsonResponse(['error' => 'Équipe non trouvée'], Response::HTTP_NOT_FOUND);
+    }
+
+    try {
+        $entityManager->remove($equipe);
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    return new JsonResponse(['message' => 'Équipe supprimée'], Response::HTTP_OK);
 }
 /**
 * Retourne la liste de toutes les épreuves au format JSON.
@@ -354,6 +440,39 @@ private function hydrateEpreuve(Epreuve $epreuve, array $data): void
     $epreuve->setDateEpreuveDebut($dateDebut);
     $epreuve->setDateEpreuveFin($dateFin);
     $epreuve->setCoeffAnnee((float) $data['coeffAnnee']);
+}
+
+private function hydrateEquipe(Equipe $equipe, array $data): void
+{
+    $requiredFields = ['maxJoueurs', 'point', 'nomEquipe', 'statut', 'nbIndice'];
+
+    foreach ($requiredFields as $field) {
+        if (!array_key_exists($field, $data)) {
+            throw new InvalidArgumentException(sprintf('Champ manquant : %s', $field));
+        }
+    }
+
+    if (!is_numeric($data['maxJoueurs'])) {
+        throw new InvalidArgumentException('maxJoueurs doit être numérique');
+    }
+
+    if (!is_numeric($data['point'])) {
+        throw new InvalidArgumentException('point doit être numérique');
+    }
+
+    if (!is_bool($data['statut'])) {
+        throw new InvalidArgumentException('statut doit être un booléen');
+    }
+
+    if (!is_numeric($data['nbIndice'])) {
+        throw new InvalidArgumentException('nbIndice doit être numérique');
+    }
+
+    $equipe->setMaxJoueurs((int) $data['maxJoueurs']);
+    $equipe->setPoint((float) $data['point']);
+    $equipe->setNomEquipe($data['nomEquipe']);
+    $equipe->setStatut($data['statut']);
+    $equipe->setNbIndice((int) $data['nbIndice']);
 }
 
 }

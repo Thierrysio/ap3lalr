@@ -210,7 +210,7 @@ public function createEpreuve(Request $request, EntityManagerInterface $entityMa
 }
 
 #[Route('/api/mobile/updateEpreuve/{id}', name: 'app_api_update_epreuve', methods: ['PUT', 'PATCH', 'POST'])]
-public function updateEpreuve(int $id, Request $request, EpreuveRepository $epreuveRepository, EntityManagerInterface $entityManager): JsonResponse
+public function updateEpreuve(int $id, Request $request, EpreuveRepository $epreuveRepository, EntityManagerInterface $entityManager)
 {
     if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
         return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);

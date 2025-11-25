@@ -261,6 +261,20 @@ public function getAllEpreuves(Request $request, EpreuveRepository $epreuveRepos
     return $response->GetJsonResponse($request, $var, $tab);
 }
 
+#[Route('/api/mobile/nextEpreuve', name: 'app_api_next_epreuve', methods: ['GET'])]
+public function getNextEpreuve(Request $request, EpreuveRepository $epreuveRepository): JsonResponse
+{
+    $nextEpreuve = $epreuveRepository->findNextEpreuve();
+
+    if (!$nextEpreuve) {
+        return new JsonResponse(['message' => 'Aucune épreuve à venir'], Response::HTTP_NOT_FOUND);
+    }
+
+    $response = new Utils();
+
+    return $response->GetJsonResponse($request, $nextEpreuve);
+}
+
 #[Route('/api/mobile/createEpreuve', name: 'app_api_create_epreuve', methods: ['POST'])]
 public function createEpreuve(Request $request, EntityManagerInterface $entityManager): JsonResponse
 {

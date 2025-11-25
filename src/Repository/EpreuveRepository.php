@@ -16,6 +16,17 @@ class EpreuveRepository extends ServiceEntityRepository
         parent::__construct($registry, Epreuve::class);
     }
 
+    public function findNextEpreuve(): ?Epreuve
+    {
+        return $this->createQueryBuilder('e')
+            ->andWhere('e.dateEpreuveDebut > :now')
+            ->setParameter('now', new \DateTime())
+            ->orderBy('e.dateEpreuveDebut', 'ASC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
 //    /**
 //     * @return Epreuve[] Returns an array of Epreuve objects
 //     */

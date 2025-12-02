@@ -2,13 +2,15 @@
 
 namespace App\Controller;
 
+use App\Entity\Eleve;
 use App\Entity\Equipe;
 use App\Entity\Epreuve;
 use App\Entity\User;
 
-    use App\Repository\UserRepository;
-    use App\Repository\EquipeRepository;
-    use App\Repository\EpreuveRepository;
+use App\Repository\EleveRepository;
+use App\Repository\UserRepository;
+use App\Repository\EquipeRepository;
+use App\Repository\EpreuveRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -18,9 +20,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 use DateTime;
 use InvalidArgumentException;
-
-
-
 use App\Utils\Utils;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
@@ -33,6 +32,115 @@ final class ApiController extends AbstractController
         return $this->render('api/index.html.twig', [
             'controller_name' => 'ApiController',
         ]);
+    }
+
+    #[Route('/api/mobile/eleves', name: 'app_api_mobile_get_all_eleves', methods: ['GET'])]
+    public function getAllEleves(Request $request, EleveRepository $eleveRepository): JsonResponse
+    {
+        $utils = new Utils();
+
+        return $utils->GetJsonResponse($request, $eleveRepository->findAll(), []);
+    }
+
+    #[Route('/api/mobile/eleves/{id}', name: 'app_api_mobile_get_eleve', methods: ['GET'])]
+    public function getEleve(int $id, Request $request, EleveRepository $eleveRepository): JsonResponse
+    {
+        $eleve = $eleveRepository->find($id);
+
+        if (!$eleve) {
+            return new JsonResponse(['error' => 'Élève non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $utils = new Utils();
+
+        return $utils->GetJsonResponse($request, $eleve, []);
+    }
+
+    #[Route('/api/mobile/eleves', name: 'app_api_mobile_create_eleve', methods: ['POST'])]
+    public function createEleve(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+            return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (JSON_ERROR_NONE !== json_last_error()) {
+            return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $eleve = new Eleve();
+
+        try {
+            $this->hydrateEleve($eleve, $payload);
+        } catch (InvalidArgumentException $exception) {
+            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $entityManager->persist($eleve);
+            $entityManager->flush();
+        } catch (\Exception $exception) {
+            return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        $utils = new Utils();
+        $response = $utils->GetJsonResponse($request, $eleve);
+        $response->setStatusCode(Response::HTTP_CREATED);
+
+        return $response;
+    }
+
+    #[Route('/api/mobile/eleves/{id}', name: 'app_api_mobile_update_eleve', methods: ['PUT', 'PATCH', 'POST'])]
+    public function updateEleve(int $id, Request $request, EleveRepository $eleveRepository, EntityManagerInterface $entityManager): JsonResponse
+    {
+        if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+            return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $eleve = $eleveRepository->find($id);
+        if (!$eleve) {
+            return new JsonResponse(['error' => 'Élève non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (JSON_ERROR_NONE !== json_last_error()) {
+            return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $this->hydrateEleve($eleve, $payload);
+        } catch (InvalidArgumentException $exception) {
+            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $entityManager->flush();
+        } catch (\Exception $exception) {
+            return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        $utils = new Utils();
+
+        return $utils->GetJsonResponse($request, $eleve, []);
+    }
+
+    #[Route('/api/mobile/eleves/{id}', name: 'app_api_mobile_delete_eleve', methods: ['DELETE', 'POST'])]
+    public function deleteEleve(int $id, EleveRepository $eleveRepository, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $eleve = $eleveRepository->find($id);
+
+        if (!$eleve) {
+            return new JsonResponse(['error' => 'Élève non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $entityManager->remove($eleve);
+            $entityManager->flush();
+        } catch (\Exception $exception) {
+            return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        return new JsonResponse(['message' => 'Élève supprimé'], Response::HTTP_OK);
     }
     
  #[Route('/api/mobile/register', name: 'app_mobile_register', methods: ['POST'])]
@@ -420,6 +528,18 @@ public function updateEquipePoints(
         'equipeId' => $equipe->getId(),
         'points' => $equipe->getPoint(),
     ], Response::HTTP_OK);
+}
+
+private function hydrateEleve(Eleve $eleve, array $data): void
+{
+    foreach (['nom', 'prenom'] as $field) {
+        if (!array_key_exists($field, $data) || !is_string($data[$field]) || '' === trim($data[$field])) {
+            throw new InvalidArgumentException(sprintf('Champ manquant ou invalide : %s', $field));
+        }
+    }
+
+    $eleve->setNom(trim($data['nom']));
+    $eleve->setPrenom(trim($data['prenom']));
 }
 
 private function hydrateEpreuve(Epreuve $epreuve, array $data): void

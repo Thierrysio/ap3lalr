@@ -122,6 +122,175 @@ final class ApiController extends AbstractController
 
         return new JsonResponse($payload, Response::HTTP_CREATED);
     }
+
+    #[Route('/api/mobile/users', name: 'app_api_mobile_users_list', methods: ['GET'])]
+    public function listUsers(Request $request, UserRepository $userRepository): JsonResponse
+    {
+        $users = $userRepository->findAll();
+
+        $utils = new Utils();
+
+        return $utils->GetJsonResponse($request, $users, ['password']);
+    }
+
+    #[Route('/api/mobile/users/{id}', name: 'app_api_mobile_users_show', methods: ['GET'])]
+    public function showUser(Request $request, UserRepository $userRepository, int $id): JsonResponse
+    {
+        $user = $userRepository->find($id);
+
+        if (!$user) {
+            return new JsonResponse(['error' => 'Utilisateur non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $utils = new Utils();
+
+        return $utils->GetJsonResponse($request, $user, ['password']);
+    }
+
+    #[Route('/api/mobile/users', name: 'app_api_mobile_users_create', methods: ['POST'])]
+    public function createUser(
+        Request $request,
+        UserPasswordHasherInterface $passwordHasher,
+        EntityManagerInterface $entityManager,
+        UserRepository $userRepository
+    ): JsonResponse {
+        if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+            return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (JSON_ERROR_NONE !== json_last_error()) {
+            return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $requiredFields = ['email', 'password', 'nom', 'prenom'];
+        foreach ($requiredFields as $field) {
+            if (!array_key_exists($field, $payload)) {
+                return new JsonResponse(['error' => sprintf('Champ manquant : %s', $field)], Response::HTTP_BAD_REQUEST);
+            }
+        }
+
+        if (!filter_var($payload['email'], FILTER_VALIDATE_EMAIL)) {
+            return new JsonResponse(['error' => 'Email invalide'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $normalizedEmail = mb_strtolower($payload['email']);
+        if ($userRepository->findOneBy(['email' => $normalizedEmail])) {
+            return new JsonResponse(['error' => 'Email déjà utilisé'], Response::HTTP_CONFLICT);
+        }
+
+        $user = new User();
+        $user->setEmail($normalizedEmail);
+        $user->setNom(trim((string) $payload['nom']));
+        $user->setPrenom(trim((string) $payload['prenom']));
+        $user->setStatut((bool) ($payload['statut'] ?? false));
+        $user->setRoles(is_array($payload['roles'] ?? null) ? $payload['roles'] : ['ROLE_USER']);
+        if (isset($payload['point']) && is_numeric($payload['point'])) {
+            $user->setPoint((float) $payload['point']);
+        } else {
+            $user->setPoint(0.0);
+        }
+
+        $hashedPassword = $passwordHasher->hashPassword($user, (string) $payload['password']);
+        $user->setPassword($hashedPassword);
+
+        try {
+            $entityManager->persist($user);
+            $entityManager->flush();
+        } catch (\Exception $exception) {
+            return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        return new JsonResponse($this->buildUserPayload($user), Response::HTTP_CREATED);
+    }
+
+    #[Route('/api/mobile/users/{id}', name: 'app_api_mobile_users_update', methods: ['PUT', 'PATCH'])]
+    public function updateUser(
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+        UserPasswordHasherInterface $passwordHasher
+    ): JsonResponse {
+        if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+            return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $userRepository->find($id);
+        if (!$user) {
+            return new JsonResponse(['error' => 'Utilisateur non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (JSON_ERROR_NONE !== json_last_error()) {
+            return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (array_key_exists('email', $payload)) {
+            if (!filter_var($payload['email'], FILTER_VALIDATE_EMAIL)) {
+                return new JsonResponse(['error' => 'Email invalide'], Response::HTTP_BAD_REQUEST);
+            }
+
+            $normalizedEmail = mb_strtolower($payload['email']);
+            $existingUser = $userRepository->findOneBy(['email' => $normalizedEmail]);
+            if ($existingUser && $existingUser->getId() !== $user->getId()) {
+                return new JsonResponse(['error' => 'Email déjà utilisé'], Response::HTTP_CONFLICT);
+            }
+
+            $user->setEmail($normalizedEmail);
+        }
+
+        if (array_key_exists('nom', $payload)) {
+            $user->setNom(trim((string) $payload['nom']));
+        }
+
+        if (array_key_exists('prenom', $payload)) {
+            $user->setPrenom(trim((string) $payload['prenom']));
+        }
+
+        if (array_key_exists('statut', $payload)) {
+            $user->setStatut((bool) $payload['statut']);
+        }
+
+        if (array_key_exists('roles', $payload) && is_array($payload['roles'])) {
+            $user->setRoles($payload['roles']);
+        }
+
+        if (array_key_exists('point', $payload) && is_numeric($payload['point'])) {
+            $user->setPoint((float) $payload['point']);
+        }
+
+        if (!empty($payload['password'])) {
+            $hashedPassword = $passwordHasher->hashPassword($user, (string) $payload['password']);
+            $user->setPassword($hashedPassword);
+        }
+
+        try {
+            $entityManager->flush();
+        } catch (\Exception $exception) {
+            return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        return new JsonResponse($this->buildUserPayload($user));
+    }
+
+    #[Route('/api/mobile/users/{id}', name: 'app_api_mobile_users_delete', methods: ['DELETE'])]
+    public function deleteUser(int $id, UserRepository $userRepository, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $user = $userRepository->find($id);
+        if (!$user) {
+            return new JsonResponse(['error' => 'Utilisateur non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $entityManager->remove($user);
+            $entityManager->flush();
+        } catch (\Exception $exception) {
+            return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        return new JsonResponse(['message' => 'Utilisateur supprimé'], Response::HTTP_OK);
+    }
     
 #[Route('/api/mobile/GetFindUser', name: 'app_api_mobile_getuser')]
 public function GetFindUser(Request $request, UserRepository $userRepository, UserPasswordHasherInterface $userPasswordHasher,)
@@ -388,11 +557,11 @@ public function registerUserToEpreuve(
 }
 
 #[Route('/api/mobile/equipes/{id}/points', name: 'app_api_update_equipe_points', methods: ['POST', 'PUT', 'PATCH'])]
-public function updateEquipePoints(
-    int $id,
-    Request $request,
-    EquipeRepository $equipeRepository,
-    EntityManagerInterface $entityManager
+    public function updateEquipePoints(
+        int $id,
+        Request $request,
+        EquipeRepository $equipeRepository,
+        EntityManagerInterface $entityManager
 ): JsonResponse {
     if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
         return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
@@ -420,6 +589,19 @@ public function updateEquipePoints(
         'equipeId' => $equipe->getId(),
         'points' => $equipe->getPoint(),
     ], Response::HTTP_OK);
+}
+
+private function buildUserPayload(User $user): array
+{
+    return [
+        'id' => $user->getId(),
+        'email' => $user->getEmail(),
+        'nom' => $user->getNom(),
+        'prenom' => $user->getPrenom(),
+        'roles' => $user->getRoles(),
+        'statut' => $user->getStatut(),
+        'point' => $user->getPoint(),
+    ];
 }
 
 private function hydrateEpreuve(Epreuve $epreuve, array $data): void

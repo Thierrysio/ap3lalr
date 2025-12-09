@@ -330,6 +330,87 @@ return $response->GetJsonResponse($request, $var,$tab);
     return $response->GetJsonResponse($request, $var,$tab);
     }
 
+#[Route('/api/mobile/updateUserEquipe', name: 'app_api_mobile_update_user_equipe', methods: ['POST'])]
+public function updateUserEquipe(
+    Request $request,
+    UserRepository $userRepository,
+    EquipeRepository $equipeRepository,
+    EntityManagerInterface $entityManager
+): JsonResponse {
+    // 1) Validate Content-Type
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    // 2) Parse JSON payload
+    $payload = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    // 3) Validate required fields
+    if (!isset($payload['userId']) || !is_numeric($payload['userId'])) {
+        return new JsonResponse(['error' => 'userId est requis et doit être numérique'], Response::HTTP_BAD_REQUEST);
+    }
+
+    if (!isset($payload['equipeId']) || !is_numeric($payload['equipeId'])) {
+        return new JsonResponse(['error' => 'equipeId est requis et doit être numérique'], Response::HTTP_BAD_REQUEST);
+    }
+
+    // 4) Check if user exists
+    $user = $userRepository->find((int) $payload['userId']);
+    if (!$user) {
+        return new JsonResponse(['error' => 'Utilisateur non trouvé'], Response::HTTP_NOT_FOUND);
+    }
+
+    // 5) Check if equipe exists
+    $equipe = $equipeRepository->find((int) $payload['equipeId']);
+    if (!$equipe) {
+        return new JsonResponse(['error' => 'Équipe non trouvée'], Response::HTTP_NOT_FOUND);
+    }
+
+    // 6) Check if user is already in this equipe
+    if ($equipe->getLesUsers()->contains($user)) {
+        return new JsonResponse([
+            'message' => 'Utilisateur déjà dans cette équipe',
+            'userId' => $user->getId(),
+            'equipeId' => $equipe->getId(),
+        ], Response::HTTP_OK);
+    }
+
+    // 7) Check if equipe is full
+    if ($equipe->getLesUsers()->count() >= $equipe->getMaxJoueurs()) {
+        return new JsonResponse(['error' => 'Équipe complète (nombre maximum de joueurs atteint)'], Response::HTTP_CONFLICT);
+    }
+
+    // 8) Remove user from all other equipes (assuming a user can only be in one equipe at a time)
+    $userEquipes = $equipeRepository->findTeamsByUser($user);
+    foreach ($userEquipes as $otherEquipe) {
+        $otherEquipe->removeLesUser($user);
+    }
+
+    // 9) Add user to the new equipe
+    $equipe->addLesUser($user);
+
+    // 10) Persist changes
+    try {
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    // 11) Return success response
+    return new JsonResponse([
+        'message' => 'Équipe de l\'utilisateur mise à jour avec succès',
+        'userId' => $user->getId(),
+        'userEmail' => $user->getEmail(),
+        'userNom' => $user->getNom(),
+        'userPrenom' => $user->getPrenom(),
+        'equipeId' => $equipe->getId(),
+        'equipeNom' => $equipe->getNomEquipe(),
+    ], Response::HTTP_OK);
+}
+
 #[Route('/api/mobile/createEquipe', name: 'app_api_create_equipe', methods: ['POST'])]
 public function createEquipe(Request $request, EntityManagerInterface $entityManager): JsonResponse
 {

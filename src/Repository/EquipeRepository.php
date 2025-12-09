@@ -15,4 +15,20 @@ class EquipeRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Equipe::class);
     }
+
+    /**
+     * Find all teams that contain a specific user
+     *
+     * @param \App\Entity\User $user
+     * @return Equipe[]
+     */
+    public function findTeamsByUser($user): array
+    {
+        return $this->createQueryBuilder('e')
+            ->innerJoin('e.lesUsers', 'u')
+            ->andWhere('u.id = :userId')
+            ->setParameter('userId', $user->getId())
+            ->getQuery()
+            ->getResult();
+    }
 }

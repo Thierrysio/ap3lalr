@@ -384,11 +384,9 @@ public function updateUserEquipe(
     }
 
     // 8) Remove user from all other equipes (assuming a user can only be in one equipe at a time)
-    $allEquipes = $equipeRepository->findAll();
-    foreach ($allEquipes as $otherEquipe) {
-        if ($otherEquipe->getLesUsers()->contains($user)) {
-            $otherEquipe->removeLesUser($user);
-        }
+    $userEquipes = $equipeRepository->findTeamsByUser($user);
+    foreach ($userEquipes as $otherEquipe) {
+        $otherEquipe->removeLesUser($user);
     }
 
     // 9) Add user to the new equipe

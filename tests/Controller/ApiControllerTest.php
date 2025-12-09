@@ -35,9 +35,12 @@ class ApiControllerTest extends WebTestCase
         $response = $this->client->getResponse();
 
         // The response could be 200 (success) or 404 (not found) depending on test data
-        $this->assertContains(
+        $this->assertThat(
             $response->getStatusCode(),
-            [Response::HTTP_OK, Response::HTTP_NOT_FOUND]
+            $this->logicalOr(
+                $this->equalTo(Response::HTTP_OK),
+                $this->equalTo(Response::HTTP_NOT_FOUND)
+            )
         );
 
         if ($response->getStatusCode() === Response::HTTP_OK) {

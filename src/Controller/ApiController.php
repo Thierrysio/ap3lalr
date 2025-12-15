@@ -411,6 +411,63 @@ public function updateUserEquipe(
     ], Response::HTTP_OK);
 }
 
+#[Route('/api/mobile/deleteUserEquipe', name: 'app_api_mobile_delete_user_equipe', methods: ['POST'])]
+public function deleteUserEquipe(
+    Request $request,
+    UserRepository $userRepository,
+    EquipeRepository $equipeRepository,
+    EntityManagerInterface $entityManager
+): JsonResponse {
+    if (0 !== strpos($request->headers->get('Content-Type', ''), 'application/json')) {
+        return new JsonResponse(['error' => 'Content-Type must be application/json'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $payload = json_decode($request->getContent(), true);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+        return new JsonResponse(['error' => 'JSON invalide ou manquant'], Response::HTTP_BAD_REQUEST);
+    }
+
+    if (!isset($payload['userId']) || !is_numeric($payload['userId'])) {
+        return new JsonResponse(['error' => 'userId est requis et doit être numérique'], Response::HTTP_BAD_REQUEST);
+    }
+
+    if (!isset($payload['equipeId']) || !is_numeric($payload['equipeId'])) {
+        return new JsonResponse(['error' => 'equipeId est requis et doit être numérique'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $user = $userRepository->find((int) $payload['userId']);
+    if (!$user) {
+        return new JsonResponse(['error' => 'Utilisateur non trouvé'], Response::HTTP_NOT_FOUND);
+    }
+
+    $equipe = $equipeRepository->find((int) $payload['equipeId']);
+    if (!$equipe) {
+        return new JsonResponse(['error' => 'Équipe non trouvée'], Response::HTTP_NOT_FOUND);
+    }
+
+    if (!$equipe->getLesUsers()->contains($user)) {
+        return new JsonResponse([
+            'message' => 'Utilisateur déjà retiré de cette équipe',
+            'userId' => $user->getId(),
+            'equipeId' => $equipe->getId(),
+        ], Response::HTTP_OK);
+    }
+
+    $equipe->removeLesUser($user);
+
+    try {
+        $entityManager->flush();
+    } catch (\Exception $exception) {
+        return new JsonResponse(['error' => 'Erreur serveur'], Response::HTTP_INTERNAL_SERVER_ERROR);
+    }
+
+    return new JsonResponse([
+        'message' => "Utilisateur retiré de l'équipe",
+        'userId' => $user->getId(),
+        'equipeId' => $equipe->getId(),
+    ], Response::HTTP_OK);
+}
+
 #[Route('/api/mobile/createEquipe', name: 'app_api_create_equipe', methods: ['POST'])]
 public function createEquipe(Request $request, EntityManagerInterface $entityManager): JsonResponse
 {
